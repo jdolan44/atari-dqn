@@ -2,7 +2,9 @@ import argparse
 import os
 import random
 import time
-from distutils.util import strtobool
+
+def strtobool(value):
+    return value.lower() in ('true', '1', 'yes', 'on')
 
 import gymnasium as gym
 import numpy as np
