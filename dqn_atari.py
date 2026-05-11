@@ -38,10 +38,6 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to save model into the `runs/{run_name}` folder")
-    parser.add_argument("--upload-model", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="whether to upload the saved model to huggingface")
-    parser.add_argument("--hf-entity", type=str, default="",
-        help="the user or org name of the model repository from the Hugging Face Hub")
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="BreakoutNoFrameskip-v4",
@@ -228,34 +224,6 @@ if __name__ == "__main__":
                     target_network_param.data.copy_(
                         args.tau * q_network_param.data + (1.0 - args.tau) * target_network_param.data
                     )
-
-    if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.pth"
-        torch.save(q_network.state_dict(), model_path)
-        print(f"model saved to {model_path}")
-
-        from dqn_eval import evaluate
-
-        episodic_returns = evaluate(
-            model_path,
-            make_env,
-            args.env_id,
-            eval_episode=10,
-            run_name=f"{run_name}-eval",
-            Model=QNetwork,
-            device=device,
-            epsilon=0.05,
-        )
-
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
-
-        if args.upload_model:
-            from huggingface import push_to_hub
-
-            repo_name = f"{args.exp_name}"
-            repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "DQN", f"runs/{run_name}", f"videos/{run_name}-eval")
 
     envs.close()
     writer.close()
