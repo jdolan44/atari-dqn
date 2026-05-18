@@ -1,11 +1,1 @@
-python3 dqn_atari.py \
-    --exp-name MsPacman-v5 \
-    --track \
-    --wandb-project-name ALE \
-    --capture-video \
-    --env-id ALE/MsPacman-v5 \
-    --total-timesteps 5000000 \
-    --buffer-size 400000 \
-    --save-model \
-    --upload-model \
-    --hf-entity adhisetiawan
+python dqn_atari.py --exp-name runn --capture-video --env-id ALE/Breakout-v5 --total-timesteps 100000 --buffer-size 400000 --save-model --learning-starts 10000
