@@ -1,5 +1,30 @@
-# Deep Q-Network (DQN) for Atari Games
+# Deep Q-Network (DQN) for Atari Games - Dolan Fork
+This fork updates the original project by fixing dependencies and increasing efficiency.
 
+## Notes on Setup
+This project should be used with python version 3.9. To do this, I used a custom environment in anaconda with 3.9 installed.
+
+```bash
+conda create -n my_atari_env python=3.9
+conda activate my_atari_env
+```
+
+Then, install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Finally, you may need an updated version of CUDA if you want GPU functionality. This command worked for me.
+
+```bash
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+```
+
+The command for running the model can be found [here](train.sh).
+
+
+# Original README
 This repository contains an implementation of the Deep Q-Network (DQN) algorithm for playing Atari games. The DQN algorithm, introduced by Mnih et al. in the paper [Playing Atari with Deep Reinforcement Learning](https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf), combines Q-learning with deep neural networks to achieve impressive results in a variety of Atari 2600 games.
 
 ## Overview
