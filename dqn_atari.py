@@ -48,7 +48,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--buffer-size", type=int, default=1000000,
+    parser.add_argument("--buffer-size", type=int, default=50000,
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
@@ -70,16 +70,24 @@ def parse_args():
         help="the frequency of training")
     args = parser.parse_args()
     # fmt: on
-    assert args.num_envs == 1, "vectorized envs are not supported at the moment"
+    # assert args.num_envs == 1, "vectorized envs are not supported at the moment"
 
     return args
 
+def to_uint8(obs):
+    return np.asarray(obs, dtype=np.uint8)
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
-        if capture_video and idx == 0:
+        render = capture_video and idx == 0
+
+        if render:
             env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            env = gym.wrappers.RecordVideo(
+                env,
+                f"videos/{run_name}",
+                episode_trigger=lambda ep: ep % 50 == 0,
+            )
         else:
             env = gym.make(env_id)
 
@@ -152,7 +160,7 @@ if __name__ == "__main__":
 
     device = "cuda"#torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    envs = gym.vector.SyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
         [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
@@ -166,14 +174,17 @@ if __name__ == "__main__":
         args.buffer_size,
         envs.single_observation_space,
         envs.single_action_space,
-        device,
-        optimize_memory_usage=True,
+        device=device,
+        n_envs=args.num_envs,
+        optimize_memory_usage=False,
         handle_timeout_termination=False
     )
     start_time = time.time()
 
     obs, _ = envs.reset(seed=args.seed)
+    obs = to_uint8(obs)
     for global_step in range(args.total_timesteps):
+        # epsilon decreases from 1 (full exploration) to 0.1 (very little exploration)
         epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
         if random.random() < epsilon:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
@@ -182,20 +193,47 @@ if __name__ == "__main__":
             actions = torch.argmax(q_values, dim=1).cpu().numpy()
 
         next_obs, rewards, terminated, truncated, infos = envs.step(actions)
+        next_obs = to_uint8(next_obs)
 
         if "final_info" in infos:
             for info in infos["final_info"]:
+
+                if info is None:
+                    continue
+
                 if "episode" not in info:
                     continue
-                print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                writer.add_scalar("charts/episode_length", info["episode"]["l"], global_step)
-                writer.add_scalar("charts/epsilon", epsilon, global_step)
 
-        real_next_obs = next_obs.copy()
+                print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+
+                writer.add_scalar(
+                    "charts/episodic_return",
+                    info["episode"]["r"],
+                    global_step,
+                )
+
+                writer.add_scalar(
+                    "charts/episode_length",
+                    info["episode"]["l"],
+                    global_step,
+                )
+
+                writer.add_scalar(
+                    "charts/epsilon",
+                    epsilon,
+                    global_step,
+                )
+
+        real_next_obs = next_obs  # default: no copy
+
         for idx, d in enumerate(truncated):
             if d:
-                real_next_obs[idx] = infos["final_observation"][idx]
+                if real_next_obs is next_obs:
+                    real_next_obs = next_obs.copy()  # copy only once if needed
+
+                if infos["final_observation"][idx] is not None:
+                    real_next_obs[idx] = to_uint8(infos["final_observation"][idx])
+                    
         rb.add(obs, real_next_obs, actions, rewards, terminated, infos)
 
         obs = next_obs
